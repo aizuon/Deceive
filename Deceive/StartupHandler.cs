@@ -5,8 +5,6 @@ using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
-using System.Runtime.ExceptionServices;
-using System.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Windows.Forms;
@@ -14,11 +12,10 @@ using Deceive.Properties;
 
 namespace Deceive
 {
-    internal static class StartupHandler
+    public static class StartupHandler
     {
-        internal static string DeceiveTitle => "Deceive " + Utils.DeceiveVersion;
+        public static string DeceiveTitle => "Deceive " + Utils.DeceiveVersion;
 
-        [STAThread]
         private static void Main(string[] args)
         {
             AppDomain.CurrentDomain.UnhandledException += CurrentDomainOnUnhandledException;
@@ -32,7 +29,8 @@ namespace Deceive
                 // Show some kind of message so that Deceive doesn't just disappear.
                 MessageBox.Show(
                     "Deceive encountered an error and couldn't properly initialize itself. " +
-                    "Please contact the creator through GitHub (https://github.com/molenzwiebel/deceive) or Discord.\n\n" + ex,
+                    "Please contact the creator through GitHub (https://github.com/molenzwiebel/deceive) or Discord.\n\n" +
+                    ex,
                     DeceiveTitle,
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error,
@@ -58,7 +56,8 @@ namespace Deceive
                     MessageBoxDefaultButton.Button1
                 );
 
-                if (result != DialogResult.Yes) return;
+                if (result != DialogResult.Yes)
+                    return;
                 Utils.KillProcesses();
                 Thread.Sleep(2000); // Riot Client takes a while to die
             }
@@ -66,8 +65,8 @@ namespace Deceive
             try
             {
                 File.WriteAllText(Path.Combine(Utils.DataDir, "debug.log"), string.Empty);
-                Debug.Listeners.Add(new TextWriterTraceListener(Path.Combine(Utils.DataDir, "debug.log")));
-                Debug.AutoFlush = true;
+                Trace.Listeners.Add(new TextWriterTraceListener(Path.Combine(Utils.DataDir, "debug.log")));
+                Trace.AutoFlush = true;
                 Trace.WriteLine(DeceiveTitle);
             }
             catch
@@ -76,15 +75,15 @@ namespace Deceive
             }
 
             // Step 0: Check for updates in the background.
-            Utils.CheckForUpdates();
+            //Utils.CheckForUpdates(); //TODO: fix version
 
             // Step 1: Open a port for our chat proxy, so we can patch chat port into clientconfig.
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
-            var port = ((IPEndPoint) listener.LocalEndpoint).Port;
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
 
             // Step 2: Find the Riot Client.
-            var riotClientPath = Utils.GetRiotClientPath();
+            string riotClientPath = Utils.GetRiotClientPath();
 
             // If the riot client doesn't exist, the user is either severely outdated or has a bugged install.
             if (riotClientPath == null)
@@ -105,23 +104,21 @@ namespace Deceive
             var proxyServer = new ConfigProxy("https://clientconfig.rpg.riotgames.com", port);
 
             // Step 4: Start the Riot Client and wait for a connect.
-            var game = "league_of_legends";
+            string game = "league_of_legends";
             if (cmdArgs.Any(x => x.ToLower() == "lor"))
-            {
                 game = "bacon";
-            }
 
             if (cmdArgs.Any(x => x.ToLower() == "valorant"))
-            {
                 game = "valorant";
-            }
 
             var startArgs = new ProcessStartInfo
             {
                 FileName = riotClientPath,
-                Arguments = $"--client-config-url=\"http://127.0.0.1:{proxyServer.ConfigPort}\" --launch-product={game} --launch-patchline=live"
+                Arguments =
+                    $"--client-config-url=\"http://127.0.0.1:{proxyServer.ConfigPort}\" --launch-product={game} --launch-patchline=live"
             };
-            if (cmdArgs.Any(x => x.ToLower() == "--allow-multiple-clients")) startArgs.Arguments += " --allow-multiple-clients";
+            if (cmdArgs.Any(x => x.ToLower() == "--allow-multiple-clients"))
+                startArgs.Arguments += " --allow-multiple-clients";
             var riotClient = Process.Start(startArgs);
             // Kill Deceive when Riot Client has exited, so no ghost Deceive exists.
             if (riotClient != null)
@@ -136,7 +133,7 @@ namespace Deceive
 
             // Step 5: Get chat server and port for this player by listening to event from ConfigProxy.
             string chatHost = null;
-            var chatPort = 0;
+            int chatPort = 0;
             proxyServer.PatchedChatServer += (sender, args) =>
             {
                 chatHost = args.ChatHost;
@@ -183,7 +180,6 @@ namespace Deceive
                 sslIncoming = new SslStream(incoming.GetStream());
                 sslIncoming.AuthenticateAsServer(cert);
                 while (true)
-                {
                     try
                     {
                         outgoing = new TcpClient(chatHost, chatPort);
@@ -202,11 +198,8 @@ namespace Deceive
                             MessageBoxDefaultButton.Button1
                         );
                         if (result == DialogResult.Cancel)
-                        {
                             Environment.Exit(0);
-                        }
                     }
-                }
 
                 sslOutgoing = new SslStream(outgoing.GetStream());
                 sslOutgoing.AuthenticateAsClient(chatHost);
@@ -216,7 +209,6 @@ namespace Deceive
             Application.Run(mainController);
         }
 
-        [HandleProcessCorruptedStateExceptions, SecurityCritical]
         private static void CurrentDomainOnUnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
             //Log all unhandled exceptions
