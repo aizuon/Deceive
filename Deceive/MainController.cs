@@ -1,11 +1,7 @@
-using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Security;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 using System.Xml;
 using System.Xml.Linq;
 using Deceive.Properties;
@@ -36,7 +32,7 @@ namespace Deceive
                 BalloonTipTitle = StartupHandler.DeceiveTitle,
                 BalloonTipText = "Deceive is currently masking your status. Right-click the tray icon for more options."
             };
-            _trayIcon.ShowBalloonTip(5000);
+            _trayIcon.ShowBalloonTip(3000);
 
             LoadStatus();
             UpdateTray();
@@ -120,11 +116,11 @@ namespace Deceive
                 Application.Exit();
             });
 
-            var closeIn = new ToolStripMenuItem("Close incoming", null, (a, e) => { _incoming.Close(); });
-            var closeOut = new ToolStripMenuItem("Close outgoing", null, (a, e) => { _outgoing.Close(); });
+            //var closeIn = new ToolStripMenuItem("Close incoming", null, (a, e) => { _incoming.Close(); });
+            //var closeOut = new ToolStripMenuItem("Close outgoing", null, (a, e) => { _outgoing.Close(); });
 
             _trayIcon.ContextMenuStrip = new ContextMenuStrip();
-            _trayIcon.ContextMenuStrip.Items.AddRange(new[]
+            _trayIcon.ContextMenuStrip.Items.AddRange(new ToolStripItem[]
             {
                 aboutMenuItem, enabledMenuItem, typeMenuItem, mucMenuItem, quitMenuItem
             });
@@ -178,7 +174,7 @@ namespace Deceive
             }
             finally
             {
-                Trace.WriteLine(@"Incoming closed.");
+                Trace.WriteLine("Incoming closed.");
                 SaveStatus();
                 if (_connected)
                     OnConnectionErrored();
@@ -199,12 +195,12 @@ namespace Deceive
                     Trace.WriteLine("<!--SERVER TO RC-->" + Encoding.UTF8.GetString(bytes, 0, byteCount));
                 } while (byteCount != 0 && _connected);
 
-                Trace.WriteLine(@"Outgoing closed.");
+                Trace.WriteLine("Outgoing closed.");
             }
             catch (Exception e)
             {
                 Trace.WriteLine(e);
-                Trace.WriteLine(@"Outgoing errored.");
+                Trace.WriteLine("Outgoing errored.");
                 SaveStatus();
                 if (_connected)
                     OnConnectionErrored();
@@ -221,6 +217,7 @@ namespace Deceive
 
                 if (xml.Root == null)
                     return;
+
                 if (xml.Root.HasElements == false)
                     return;
 
@@ -228,10 +225,12 @@ namespace Deceive
                 {
                     if (presence.Name != "presence")
                         continue;
+
                     if (presence.Attribute("to") != null)
                     {
                         if (_connectToMuc)
                             continue;
+
                         presence.Remove();
                     }
 
@@ -248,6 +247,7 @@ namespace Deceive
 
                     if (targetStatus == "chat")
                         continue;
+
                     presence.Element("status")?.Remove();
 
                     if (targetStatus == "mobile")
@@ -282,7 +282,7 @@ namespace Deceive
             catch (Exception e)
             {
                 Trace.WriteLine(e);
-                Trace.WriteLine(@"Error rewriting presence.");
+                Trace.WriteLine("Error rewriting presence.");
             }
         }
 
@@ -327,6 +327,7 @@ namespace Deceive
 
             if (_sentIntroductionText)
                 return;
+
             _sentIntroductionText = true;
 
             SendMessageFromFakePlayer("Welcome! Deceive is running and you are currently appearing " + _status +
@@ -345,7 +346,7 @@ namespace Deceive
         {
             return;
 
-            string stamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            string stamp = DateTime.UtcNow.AddSeconds(1).ToString("yyyy-MM-dd HH:mm:ss.fff");
 
             string chatMessage =
                 $"<message from='41c322a1-b328-495b-a004-5ccd3e45eae8@eu1.pvp.net/RC-Deceive' stamp='{stamp}' id='fake-{stamp}' type='chat'><body>{message}</body></message>";

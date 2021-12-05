@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
-using System.Windows.Forms;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace Deceive
 {
@@ -46,12 +42,13 @@ namespace Deceive
                 var response =
                     await httpClient.GetAsync("https://api.github.com/repos/molenzwiebel/deceive/releases/latest");
                 string content = await response.Content.ReadAsStringAsync();
-                var release = JsonConvert.DeserializeObject<Dictionary<string, object>>(content);
-                string latestVersion = release["tag_name"] as string;
+                var release = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(content);
+                string latestVersion = release["tag_name"].Deserialize<string>();
 
                 // If failed to fetch or already latest or newer, return.
                 if (latestVersion == null)
                     return;
+
                 var githubVersion = new Version(latestVersion.Replace("v", ""));
                 var assemblyVersion = new Version(DeceiveVersion.Replace("v", ""));
                 // Earlier = -1, Same = 0, Later = 1
@@ -81,7 +78,7 @@ namespace Deceive
 
                 if (result == DialogResult.OK)
                     // Open the url in the browser.
-                    Process.Start(release["html_url"] as string);
+                    Process.Start(release["html_url"].Deserialize<string>());
             }
             catch
             {
@@ -92,7 +89,7 @@ namespace Deceive
         private static IEnumerable<Process> GetProcesses()
         {
             var riotCandidates = Process.GetProcessesByName(Process.GetCurrentProcess().ProcessName)
-                .Where(process => process.Id != Process.GetCurrentProcess().Id).ToList();
+                .Where(process => process.Id != Environment.ProcessId).ToList();
             riotCandidates.AddRange(Process.GetProcessesByName("LeagueClient"));
             riotCandidates.AddRange(Process.GetProcessesByName("LoR"));
             riotCandidates.AddRange(Process.GetProcessesByName("VALORANT-Win64-Shipping"));
@@ -114,6 +111,7 @@ namespace Deceive
                 process.Refresh();
                 if (process.HasExited)
                     continue;
+
                 process.Kill();
                 process.WaitForExit();
             }
@@ -130,15 +128,17 @@ namespace Deceive
             if (!File.Exists(installPath))
                 return null;
 
-            var data = JsonConvert.DeserializeObject<Dictionary<string, object>>(File.ReadAllText(installPath));
+            var data = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(File.ReadAllText(installPath));
             var rcPaths = new List<string>();
 
             if (data.ContainsKey("rc_default"))
-                rcPaths.Add(data["rc_default"] as string);
+                rcPaths.Add(data["rc_default"].Deserialize<string>());
+
             if (data.ContainsKey("rc_live"))
-                rcPaths.Add(data["rc_live"] as string);
+                rcPaths.Add(data["rc_live"].Deserialize<string>());
+
             if (data.ContainsKey("rc_beta"))
-                rcPaths.Add(data["rc_beta"] as string);
+                rcPaths.Add(data["rc_beta"].Deserialize<string>());
 
             return rcPaths.FirstOrDefault(File.Exists);
         }

@@ -1,13 +1,9 @@
-﻿using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Windows.Forms;
 using Deceive.Properties;
 
 namespace Deceive
@@ -58,6 +54,7 @@ namespace Deceive
 
                 if (result != DialogResult.Yes)
                     return;
+
                 Utils.KillProcesses();
                 Thread.Sleep(2000); // Riot Client takes a while to die
             }
@@ -119,6 +116,7 @@ namespace Deceive
             };
             if (cmdArgs.Any(x => x.ToLower() == "--allow-multiple-clients"))
                 startArgs.Arguments += " --allow-multiple-clients";
+
             var riotClient = Process.Start(startArgs);
             // Kill Deceive when Riot Client has exited, so no ghost Deceive exists.
             if (riotClient != null)

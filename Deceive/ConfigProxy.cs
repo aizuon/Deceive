@@ -1,17 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
+using System.Text.Json;
 using EmbedIO;
 using EmbedIO.Actions;
 using Microsoft.IdentityModel.JsonWebTokens;
-using Newtonsoft.Json;
 
 namespace Deceive
 {
@@ -78,7 +73,7 @@ namespace Deceive
 
             try
             {
-                var configObject = JsonConvert.DeserializeObject<Dictionary<string, object>>(content);
+                var configObject = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(content);
 
                 string riotChatHost = null;
                 int riotChatPort = 0;
@@ -87,24 +82,23 @@ namespace Deceive
                 if (configObject.ContainsKey("chat.host"))
                 {
                     // Save fallback host
-                    riotChatHost = configObject["chat.host"].ToString();
-                    configObject["chat.host"] = "127.0.0.1";
+                    riotChatHost = configObject["chat.host"].Deserialize<string>();
+                    configObject["chat.host"] = JsonSerializer.SerializeToElement("127.0.0.1");
                 }
 
                 // Set chat port.
                 if (configObject.ContainsKey("chat.port"))
                 {
-                    riotChatPort = int.Parse(configObject["chat.port"].ToString());
-                    configObject["chat.port"] = chatPort;
+                    riotChatPort = configObject["chat.port"].Deserialize<int>();
+                    configObject["chat.port"] = JsonSerializer.SerializeToElement(chatPort);
                 }
 
                 // Set chat.affinities (a dictionary) to all localhost.
                 if (configObject.ContainsKey("chat.affinities"))
                 {
                     var affinities =
-                        JsonConvert.DeserializeObject<Dictionary<string, string>>(configObject["chat.affinities"]
-                            .ToString());
-                    if ((bool)configObject["chat.affinity.enabled"])
+                        configObject["chat.affinities"].Deserialize<Dictionary<string, JsonElement>>();
+                    if (configObject["chat.affinity.enabled"].Deserialize<bool>())
                     {
                         var pasRequest = new HttpRequestMessage(HttpMethod.Get,
                             "https://riot-geo.pas.si.riotgames.com/pas/v1/service/chat");
@@ -114,21 +108,21 @@ namespace Deceive
                         Trace.WriteLine("PAS TOKEN:" + pasJwt);
                         string affinity = new JsonWebToken(pasJwt).GetPayloadValue<string>("affinity");
                         // replace fallback host with host by player affinity
-                        riotChatHost = affinities[affinity];
+                        riotChatHost = affinities[affinity].Deserialize<string>();
                     }
 
                     foreach (string key in
                              new List<string>(affinities.Keys)) // clone to prevent concurrent modification
-                        affinities[key] = "127.0.0.1";
+                        affinities[key] = JsonSerializer.SerializeToElement("127.0.0.1");
 
-                    configObject["chat.affinities"] = affinities;
+                    configObject["chat.affinities"] = JsonSerializer.SerializeToElement(affinities);
                 }
 
                 // Allow an invalid cert.
                 if (configObject.ContainsKey("chat.allow_bad_cert.enabled"))
-                    configObject["chat.allow_bad_cert.enabled"] = true;
+                    configObject["chat.allow_bad_cert.enabled"] = JsonSerializer.SerializeToElement(true);
 
-                modifiedContent = JsonConvert.SerializeObject(configObject);
+                modifiedContent = JsonSerializer.Serialize(configObject);
                 Trace.WriteLine("MODIFIED CLIENTCONFIG: " + modifiedContent);
 
                 if (riotChatHost != null && riotChatPort != 0)
@@ -161,7 +155,7 @@ namespace Deceive
             ctx.Response.SendChunked = false;
             ctx.Response.ContentLength64 = responseBytes.Length;
             ctx.Response.ContentType = "application/json";
-            await ctx.Response.OutputStream.WriteAsync(responseBytes, 0, responseBytes.Length);
+            await ctx.Response.OutputStream.WriteAsync(responseBytes);
             ctx.Response.OutputStream.Close();
         }
 
