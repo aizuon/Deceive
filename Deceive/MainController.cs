@@ -177,7 +177,7 @@ namespace Deceive
                 Trace.WriteLine("Incoming closed.");
                 SaveStatus();
                 if (_connected)
-                    OnConnectionErrored();
+                    OnConnectionError();
             }
         }
 
@@ -203,7 +203,7 @@ namespace Deceive
                 Trace.WriteLine("Outgoing errored.");
                 SaveStatus();
                 if (_connected)
-                    OnConnectionErrored();
+                    OnConnectionError();
             }
         }
 
@@ -382,7 +382,7 @@ namespace Deceive
             File.WriteAllText(_statusFile, _status);
         }
 
-        private void OnConnectionErrored()
+        private void OnConnectionError()
         {
             _connected = false;
             ConnectionErrored?.Invoke(this, EventArgs.Empty);

@@ -15,6 +15,8 @@ namespace Deceive
         private static void Main(string[] args)
         {
             AppDomain.CurrentDomain.UnhandledException += CurrentDomainOnUnhandledException;
+            Application.EnableVisualStyles();
+            Application.SetHighDpiMode(HighDpiMode.SystemAware);
             try
             {
                 StartDeceive(args);
@@ -203,7 +205,6 @@ namespace Deceive
                 sslOutgoing.AuthenticateAsClient(chatHost);
                 mainController.StartThreads(sslIncoming, sslOutgoing);
             };
-            Application.EnableVisualStyles();
             Application.Run(mainController);
         }
 

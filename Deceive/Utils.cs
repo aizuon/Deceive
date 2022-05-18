@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Deceive
 {
@@ -42,43 +43,48 @@ namespace Deceive
                 var response =
                     await httpClient.GetAsync("https://api.github.com/repos/molenzwiebel/deceive/releases/latest");
                 string content = await response.Content.ReadAsStringAsync();
-                var release = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(content);
-                string latestVersion = release["tag_name"].Deserialize<string>();
+                var release = JsonSerializer.Deserialize<JsonNode>(content);
+                if (release != null)
+                {
+                    string latestVersion = release["tag_name"]?.GetValue<string>();
 
-                // If failed to fetch or already latest or newer, return.
-                if (latestVersion == null)
-                    return;
+                    // If failed to fetch or already latest or newer, return.
+                    if (latestVersion == null)
+                        return;
 
-                var githubVersion = new Version(latestVersion.Replace("v", ""));
-                var assemblyVersion = new Version(DeceiveVersion.Replace("v", ""));
-                // Earlier = -1, Same = 0, Later = 1
-                if (assemblyVersion.CompareTo(githubVersion) != -1)
-                    return;
+                    var githubVersion = new Version(latestVersion.Replace("v", string.Empty));
+                    var assemblyVersion = new Version(DeceiveVersion.Replace("v", string.Empty));
+                    // Earlier = -1, Same = 0, Later = 1
+                    if (assemblyVersion.CompareTo(githubVersion) != -1)
+                        return;
 
-                // Check if we have shown this before.
-                string persistencePath = Path.Combine(DataDir, "updateVersionPrompted");
-                string latestShownVersion = File.Exists(persistencePath) ? File.ReadAllText(persistencePath) : "";
+                    // Check if we have shown this before.
+                    string persistencePath = Path.Combine(DataDir, "updateVersionPrompted");
+                    string latestShownVersion = File.Exists(persistencePath)
+                        ? await File.ReadAllTextAsync(persistencePath)
+                        : string.Empty;
 
-                // If we have, return.
-                if (latestShownVersion == latestVersion)
-                    return;
+                    // If we have, return.
+                    if (latestShownVersion == latestVersion)
+                        return;
 
-                // Show a message and record the latest shown.
-                File.WriteAllText(persistencePath, latestVersion);
+                    // Show a message and record the latest shown.
+                    await File.WriteAllTextAsync(persistencePath, latestVersion);
 
-                var result = MessageBox.Show(
-                    $"There is a new version of Deceive available: {latestVersion}. You are currently using Deceive {DeceiveVersion}. " +
-                    "Deceive updates usually fix critical bugs or adapt to changes by Riot, so it is recommended that you install the latest version.\n\n" +
-                    "Press OK to visit the download page, or press Cancel to continue. Don't worry, we won't bother you with this message again if you press cancel.",
-                    StartupHandler.DeceiveTitle,
-                    MessageBoxButtons.OKCancel,
-                    MessageBoxIcon.Information,
-                    MessageBoxDefaultButton.Button1
-                );
+                    var result = MessageBox.Show(
+                        $"There is a new version of Deceive available: {latestVersion}. You are currently using Deceive {DeceiveVersion}. " +
+                        "Deceive updates usually fix critical bugs or adapt to changes by Riot, so it is recommended that you install the latest version.\n\n" +
+                        "Press OK to visit the download page, or press Cancel to continue. Don't worry, we won't bother you with this message again if you press cancel.",
+                        StartupHandler.DeceiveTitle,
+                        MessageBoxButtons.OKCancel,
+                        MessageBoxIcon.Information,
+                        MessageBoxDefaultButton.Button1
+                    );
 
-                if (result == DialogResult.OK)
-                    // Open the url in the browser.
-                    Process.Start(release["html_url"].Deserialize<string>());
+                    if (result == DialogResult.OK)
+                        // Open the url in the browser.
+                        Process.Start(release["html_url"]?.GetValue<string>());
+                }
             }
             catch
             {
@@ -128,17 +134,13 @@ namespace Deceive
             if (!File.Exists(installPath))
                 return null;
 
-            var data = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(File.ReadAllText(installPath));
-            var rcPaths = new List<string>();
-
-            if (data.ContainsKey("rc_default"))
-                rcPaths.Add(data["rc_default"].Deserialize<string>());
-
-            if (data.ContainsKey("rc_live"))
-                rcPaths.Add(data["rc_live"].Deserialize<string>());
-
-            if (data.ContainsKey("rc_beta"))
-                rcPaths.Add(data["rc_beta"].Deserialize<string>());
+            var data = JsonSerializer.Deserialize<JsonNode>(File.ReadAllText(installPath));
+            var rcPaths = new List<string>
+            {
+                data?["rc_default"]?.GetValue<string>(),
+                data?["rc_live"]?.GetValue<string>(),
+                data?["rc_beta"]?.GetValue<string>()
+            };
 
             return rcPaths.FirstOrDefault(File.Exists);
         }

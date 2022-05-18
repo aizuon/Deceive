@@ -4,9 +4,9 @@ using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using EmbedIO;
 using EmbedIO.Actions;
-using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace Deceive
 {
@@ -71,56 +71,63 @@ namespace Deceive
             string modifiedContent = content;
             Trace.WriteLine("ORIGINAL CLIENTCONFIG: " + content);
 
+            if (!result.IsSuccessStatusCode)
+                goto RESPOND;
+
             try
             {
-                var configObject = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(content);
+                var configObject = JsonSerializer.Deserialize<JsonNode>(content);
 
                 string riotChatHost = null;
                 int riotChatPort = 0;
 
                 // Set fallback host to localhost.
-                if (configObject.ContainsKey("chat.host"))
+                if (configObject?["chat.host"] != null)
                 {
                     // Save fallback host
-                    riotChatHost = configObject["chat.host"].Deserialize<string>();
-                    configObject["chat.host"] = JsonSerializer.SerializeToElement("127.0.0.1");
+                    riotChatHost = configObject["chat.host"].GetValue<string>();
+                    configObject["chat.host"] = "127.0.0.1";
                 }
 
                 // Set chat port.
-                if (configObject.ContainsKey("chat.port"))
+                if (configObject?["chat.port"] != null)
                 {
-                    riotChatPort = configObject["chat.port"].Deserialize<int>();
-                    configObject["chat.port"] = JsonSerializer.SerializeToElement(chatPort);
+                    riotChatPort = configObject["chat.port"].GetValue<int>();
+                    configObject["chat.port"] = chatPort;
                 }
 
                 // Set chat.affinities (a dictionary) to all localhost.
-                if (configObject.ContainsKey("chat.affinities"))
+                if (configObject?["chat.affinities"] != null)
                 {
-                    var affinities =
-                        configObject["chat.affinities"].Deserialize<Dictionary<string, JsonElement>>();
-                    if (configObject["chat.affinity.enabled"].Deserialize<bool>())
+                    var affinities = configObject["chat.affinities"];
+                    if (configObject["chat.affinity.enabled"]?.GetValue<bool>() ?? false)
                     {
                         var pasRequest = new HttpRequestMessage(HttpMethod.Get,
                             "https://riot-geo.pas.si.riotgames.com/pas/v1/service/chat");
                         pasRequest.Headers.TryAddWithoutValidation("Authorization",
                             ctx.Request.Headers["authorization"]);
                         string pasJwt = await (await _client.SendAsync(pasRequest)).Content.ReadAsStringAsync();
-                        Trace.WriteLine("PAS TOKEN:" + pasJwt);
-                        string affinity = new JsonWebToken(pasJwt).GetPayloadValue<string>("affinity");
-                        // replace fallback host with host by player affinity
-                        riotChatHost = affinities[affinity].Deserialize<string>();
+                        Trace.WriteLine("PAS JWT:" + pasJwt);
+                        string pasJwtContent = pasJwt.Split('.')[1];
+                        string validBase64 =
+                            pasJwtContent.PadRight(
+                                pasJwtContent.Length / 4 * 4 + (pasJwtContent.Length % 4 == 0 ? 0 : 4), '=');
+                        string pasJwtString = Encoding.UTF8.GetString(Convert.FromBase64String(validBase64));
+                        var pasJwtJson = JsonSerializer.Deserialize<JsonNode>(pasJwtString);
+                        string affinity = pasJwtJson?["affinity"]?.GetValue<string>();
+                        if (affinity != null)
+                        {
+                            riotChatHost = affinities?[affinity]?.GetValue<string>();
+                            Trace.WriteLine($"AFFINITY: {affinity} -> {riotChatHost}");
+                        }
                     }
 
-                    foreach (string key in
-                             new List<string>(affinities.Keys)) // clone to prevent concurrent modification
-                        affinities[key] = JsonSerializer.SerializeToElement("127.0.0.1");
-
-                    configObject["chat.affinities"] = JsonSerializer.SerializeToElement(affinities);
+                    affinities?.AsObject().Select(pair => pair.Key).ToList().ForEach(s => affinities[s] = "127.0.0.1");
                 }
 
                 // Allow an invalid cert.
-                if (configObject.ContainsKey("chat.allow_bad_cert.enabled"))
-                    configObject["chat.allow_bad_cert.enabled"] = JsonSerializer.SerializeToElement(true);
+                if (configObject?["chat.allow_bad_cert.enabled"] != null)
+                    configObject["chat.allow_bad_cert.enabled"] = true;
 
                 modifiedContent = JsonSerializer.Serialize(configObject);
                 Trace.WriteLine("MODIFIED CLIENTCONFIG: " + modifiedContent);
@@ -149,6 +156,7 @@ namespace Deceive
 
             // Using the builtin EmbedIO methods for sending the response adds some garbage in the front of it.
             // This seems to do the trick.
+            RESPOND:
             byte[] responseBytes = Encoding.UTF8.GetBytes(modifiedContent);
 
             ctx.Response.StatusCode = (int)result.StatusCode;
